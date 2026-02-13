@@ -78,18 +78,22 @@ def get_trend_signal(df):
     else:
         return "盤整 ↔️"
 
+# 修改：只快取數據，不快取物件
 @st.cache_data(ttl=300)
-def fetch_stock_data(ticker, period="6mo"):
-    """獲取股票數據"""
+def fetch_stock_history(ticker, period="6mo"):
+    """獲取股票歷史價格數據"""
     try:
         stock = yf.Ticker(ticker)
         df = stock.history(period=period)
         if df.empty:
-            return None, None
-        return df, stock
+            return None
+        return df
     except Exception as e:
-        st.error(f"無法獲取數據: {str(e)}")
-        return None, None
+        return None
+
+def get_stock_object(ticker):
+    """獲取 Ticker 物件 (不快取)"""
+    return yf.Ticker(ticker)
 
 def plot_candlestick(df, ticker):
     """繪製 K 線圖"""
@@ -258,7 +262,8 @@ if mode == "📊 個股分析":
     
     if st.button("🔍 分析", type="primary"):
         with st.spinner(f"載入 {ticker} 中..."):
-            df, stock = fetch_stock_data(ticker)
+            df = fetch_stock_history(ticker)
+            stock = get_stock_object(ticker) # 直接獲取物件
             
             if df is not None and stock is not None:
                 # 關鍵指標
