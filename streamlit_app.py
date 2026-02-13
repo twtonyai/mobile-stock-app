@@ -341,11 +341,21 @@ if mode == "📊 個股分析":
                 col2.metric("RSI(14)", f"{rsi:.1f}")
                 col3.metric("趨勢", trend)
                 
-                # ========== 修改開始：改用互動式圖表 ==========
-                st.subheader("📈 技術分析 (可縮放)")
+                # ========== 修改開始：改為靜態圖表 (適合手機) ==========
+                st.subheader("📈 技術分析圖")
                 try:
                     fig = plot_candlestick(df, ticker)
-                    st.plotly_chart(fig, use_container_width=True) # 改用 st.plotly_chart
+                    
+                    # 關鍵修改：加入 config={'staticPlot': True}
+                    # 這會讓圖表變成純靜態，手機滑動時不會卡住，就像一張圖片
+                    st.plotly_chart(
+                        fig, 
+                        use_container_width=True, 
+                        config={
+                            'staticPlot': True,      # 這行是關鍵：完全靜態化
+                            'displayModeBar': False  # 隱藏右上角的工具列
+                        }
+                    )
                 except Exception as e:
                     st.error(f"圖表繪製失敗: {str(e)}")
                 # ========== 修改結束 ==========
