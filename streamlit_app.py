@@ -244,12 +244,6 @@ def create_sector_heatmap(df):
     # 計算絕對值用於區塊大小
     df['abs_change'] = df['change'].abs()
     
-    # 格式化顯示文字
-    df['display_text'] = df.apply(
-        lambda x: f"<b>{x['sector']}</b><br><b style='font-size:18px'>{x['change']:+.2f}%</b>",
-        axis=1
-    )
-    
     # 使用 RdYlGn_r 配色（反轉）：綠色=負值（下跌），紅色=正值（上漲）
     fig = px.treemap(
         df,
@@ -258,15 +252,15 @@ def create_sector_heatmap(df):
         color='change',
         color_continuous_scale='RdYlGn_r',  # 反轉配色
         color_continuous_midpoint=0,
-        custom_data=['display_text'],
         title='S&P 500 行業熱圖 (紅漲綠跌)'
     )
     
-    # 更新佈局
+    # ✅ 使用內建變數和自定義 hovertemplate
     fig.update_traces(
         texttemplate='%{customdata[0]}',
         textposition='middle center',
         marker=dict(line=dict(width=2, color='white'))
+        hovertemplate='<b>%{label}</b><br>漲跌幅: %{color:+.2f}%<extra></extra>'
     )
     
     fig.update_layout(
