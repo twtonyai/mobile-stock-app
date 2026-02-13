@@ -183,62 +183,83 @@ def fetch_institutional_holders(stock):
         return None
 
 @st.cache_data(ttl=300)
+@st.cache_data(ttl=300)
 def fetch_sector_performance():
-    """獲取行業表現"""
+    """獲取當日行業表現 - 確保所有行業都顯示"""
     sector_data = []
     
     for ticker, name in SP500_SECTORS.items():
+        # 預設資料：若抓不到則顯示為「無資料」狀態
+        row = {'sector': name, 'ticker': ticker, 'change': 0.0, 'status': 'no_data'}
         try:
             stock = yf.Ticker(ticker)
-            hist = stock.history(period="5d")
+            # 抓取 7 天數據以確保覆蓋週末，確保能拿到最後兩筆交易日
+            hist = stock.history(period="7d")
             
-            if not hist.empty and len(hist) >= 2:
-                current = hist['Close'].iloc[-1]
-                previous = hist['Close'].iloc[-2]
-                change = ((current - previous) / previous) * 100
-                
-                sector_data.append({
-                    'sector': name,
-                    'ticker': ticker,
-                    'change': change
-                })
-        except:
-            continue
+            if not hist.empty:
+                if len(hist) >= 2:
+                    # 邏輯：(最新收盤 - 前一收盤) / 前一收盤
+                    current = hist['Close'].iloc[-1]
+                    previous = hist['Close'].iloc[-2]
+                    row['change'] = ((current - previous) / previous) * 100
+                    row['status'] = 'ok'
+                else:
+                    # 備援邏輯：若只有一筆，抓取即時 info 中的前收盤價
+                    current = hist['Close'].iloc[-1]
+                    prev_close = stock.info.get('previousClose')
+                    if prev_close:
+                        row['change'] = ((current - prev_close) / prev_close) * 100
+                        row['status'] = 'ok'
+        except Exception:
+            pass
+            
+        sector_data.append(row)
     
     return pd.DataFrame(sector_data)
 
 def create_sector_heatmap(df):
-    """創建行業熱圖 - 修正 hover 顯示問題"""
-    if df.empty:
-        return None
+    """創建台股風格熱圖 (紅漲綠跌)"""
+    if df.empty: return None
+
+    # 準備顯示文字：沒資料時顯示「無資料」
+    df['display_text'] = df.apply(
+        lambda x: f"{x['change']:+.2f}%" if x['status'] == 'ok' else "無資料", axis=1
+    )
     
-    df['abs_change'] = df['change'].abs()
-    
-    # 創建熱圖
+    # 方塊大小依據：漲跌幅絕對值，最小值給 0.1 確保「無資料」也能看到方塊
+    df['abs_change'] = df['change'].abs().apply(lambda x: x if x > 0.01 else 0.5)
+
     fig = px.treemap(
         df,
         path=['sector'],
         values='abs_change',
         color='change',
-        color_continuous_scale='RdYlGn_r',
+        # 台股顏色：綠(跌) -> 灰(平) -> 紅(漲)
+        color_continuous_scale=[
+            [0, "#228B22"],      # 深綠
+            [0.45, "#90EE90"],   # 淺綠
+            [0.5, "#808080"],    # 灰色 (0%)
+            [0.55, "#FFB6C1"],   # 淺紅
+            [1, "#FF0000"]       # 純紅
+        ],
         color_continuous_midpoint=0,
-        hover_data={'change': ':.2f'}  # 只顯示漲跌幅
+        range_color=[-4, 4]
     )
-    
-    # 自定義文字顯示
+
     fig.update_traces(
-        texttemplate="<b>%{label}</b><br><b>%{color:+.2f}%</b>",
+        # 使用 customdata 帶入我們準備好的 display_text
+        texttemplate="<span style='font-size:16px;'><b>%{label}</b></span><br><span style='font-size:20px;'>%{customdata[0]}</span>",
+        customdata=df[['display_text']],
         textposition='middle center',
-        marker=dict(line=dict(width=2, color='white')),
-        hovertemplate='<b>%{label}</b><br>漲跌幅: %{color:+.2f}%<extra></extra>'  # 自定義 hover
+        marker=dict(line=dict(width=1, color='white')),
+        hovertemplate='<b>%{label}</b><br>漲跌幅: %{customdata[0]}<extra></extra>'
     )
     
     fig.update_layout(
         height=600,
-        margin=dict(t=30, l=10, r=10, b=10),
-        coloraxis_colorbar=dict(title="漲跌%", tickformat='+.1f')
+        margin=dict(t=10, l=10, r=10, b=10),
+        coloraxis_colorbar=dict(title="漲跌%", tickvals=[-4, -2, 0, 2, 4])
     )
-    
     return fig
 
 # ========== 主程式 ==========
