@@ -183,13 +183,12 @@ def fetch_institutional_holders(stock):
         return None
 
 @st.cache_data(ttl=300)
-@st.cache_data(ttl=300)
 def fetch_sector_performance():
-    """獲取當日行業表現 - 確保所有行業都顯示"""
+    """獲取當日行業表現並紀錄日期資訊"""
     sector_data = []
     
     for ticker, name in SP500_SECTORS.items():
-        # 預設資料：若抓不到則顯示為「無資料」狀態
+        # 初始化 row，預設狀態為 no_data
         row = {
             'sector': name, 
             'ticker': ticker, 
@@ -198,22 +197,36 @@ def fetch_sector_performance():
             'today': 'N/A',
             'yesterday': 'N/A'
         }
-try:
+        try:
             stock = yf.Ticker(ticker)
+            # 抓取 7 天確保能取得最後兩個交易日
             hist = stock.history(period="7d")
             
             if not hist.empty and len(hist) >= 2:
-                # 紀錄最後兩筆交易日的日期
+                # 紀錄具體日期
                 row['today'] = hist.index[-1].strftime('%Y-%m-%d')
                 row['yesterday'] = hist.index[-2].strftime('%Y-%m-%d')
                 
+                # 計算當日漲跌 (最新收盤 vs 前一交易日收盤)
                 current = hist['Close'].iloc[-1]
                 previous = hist['Close'].iloc[-2]
                 row['change'] = ((current - previous) / previous) * 100
                 row['status'] = 'ok'
-        except:
+            elif not hist.empty and len(hist) == 1:
+                # 備援：若只有一筆，嘗試抓取 yfinance info
+                row['today'] = hist.index[-1].strftime('%Y-%m-%d')
+                current = hist['Close'].iloc[-1]
+                prev_close = stock.info.get('previousClose')
+                if prev_close:
+                    row['change'] = ((current - prev_close) / prev_close) * 100
+                    row['yesterday'] = "PrevClose API"
+                    row['status'] = 'ok'
+        except Exception:
+            # 發生錯誤時保持預設值，確保方塊不消失
             pass
+            
         sector_data.append(row)
+    
     return pd.DataFrame(sector_data)
 
 def create_sector_heatmap(df):
