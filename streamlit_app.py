@@ -190,31 +190,30 @@ def fetch_sector_performance():
     
     for ticker, name in SP500_SECTORS.items():
         # 預設資料：若抓不到則顯示為「無資料」狀態
-        row = {'sector': name, 'ticker': ticker, 'change': 0.0, 'status': 'no_data'}
-        try:
+        row = {
+            'sector': name, 
+            'ticker': ticker, 
+            'change': 0.0, 
+            'status': 'no_data',
+            'today': 'N/A',
+            'yesterday': 'N/A'
+        }
+try:
             stock = yf.Ticker(ticker)
-            # 抓取 7 天數據以確保覆蓋週末，確保能拿到最後兩筆交易日
             hist = stock.history(period="7d")
             
-            if not hist.empty:
-                if len(hist) >= 2:
-                    # 邏輯：(最新收盤 - 前一收盤) / 前一收盤
-                    current = hist['Close'].iloc[-1]
-                    previous = hist['Close'].iloc[-2]
-                    row['change'] = ((current - previous) / previous) * 100
-                    row['status'] = 'ok'
-                else:
-                    # 備援邏輯：若只有一筆，抓取即時 info 中的前收盤價
-                    current = hist['Close'].iloc[-1]
-                    prev_close = stock.info.get('previousClose')
-                    if prev_close:
-                        row['change'] = ((current - prev_close) / prev_close) * 100
-                        row['status'] = 'ok'
-        except Exception:
+            if not hist.empty and len(hist) >= 2:
+                # 紀錄最後兩筆交易日的日期
+                row['today'] = hist.index[-1].strftime('%Y-%m-%d')
+                row['yesterday'] = hist.index[-2].strftime('%Y-%m-%d')
+                
+                current = hist['Close'].iloc[-1]
+                previous = hist['Close'].iloc[-2]
+                row['change'] = ((current - previous) / previous) * 100
+                row['status'] = 'ok'
+        except:
             pass
-            
         sector_data.append(row)
-    
     return pd.DataFrame(sector_data)
 
 def create_sector_heatmap(df):
@@ -346,9 +345,20 @@ elif mode == "🔥 S&P 500 熱圖":
                 avg_change = sector_df['change'].mean()
                 st.metric("平均漲跌", f"{avg_change:+.2f}%")
                 
-                fig = create_sector_heatmap(sector_df)
-                if fig:
-                    st.plotly_chart(fig, use_container_width=True)
+            fig = create_sector_heatmap(sector_df)
+            if fig:
+                st.plotly_chart(fig, use_container_width=True)
+                
+                # --- 新增：顯示取用的數據日期 ---
+                # 從 DataFrame 中找出最新的交易日期 (排除 N/A)
+                valid_dates = sector_df[sector_df['today'] != 'N/A']
+                if not valid_dates.empty:
+                    latest_t = valid_dates['today'].max()
+                    prev_t = valid_dates['yesterday'].max()
+                    st.info(f"📊 **數據基準說明**")
+                    st.caption(f"本熱圖計算邏輯：比較 **{latest_t}** (當日收盤) 與 **{prev_t}** (前一交易日收盤) 之價差。")
+                else:
+                    st.warning("⚠️ 目前抓取不到任何有效日期數據，請檢查網路連線。")
                 
                 st.subheader("📋 詳細數據")
                 display_df = sector_df[['sector', 'ticker', 'change']].copy()
