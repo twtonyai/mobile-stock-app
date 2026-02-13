@@ -100,58 +100,112 @@ def get_stock_object(ticker):
 # ========== 修改開始：替換 plot_candlestick 函式 ==========
 def plot_candlestick(df, ticker):
     """
-    使用 Plotly 繪製互動式 K 線圖
-    解決中文亂碼，支援紅漲綠跌與互動縮放
+    使用 Plotly 繪製靜態 K 線圖 (美化版)
+    優化：Y軸右置、移除干擾文字、調整顏色
     """
     # 計算指標
     df['MA20'] = df['Close'].rolling(window=20).mean()
     df['MA60'] = df['Close'].rolling(window=60).mean()
     df['RSI'] = calculate_rsi(df)
 
-    # 建立畫布：3 列 (K線, 成交量, RSI)
-    # row_heights 控制高度比例：K線最大
+    # 建立畫布：3 列
+    # shared_xaxes=True: 共用 X 軸
+    # vertical_spacing: 子圖之間的間距 (調小一點讓畫面更緊湊)
     fig = make_subplots(
         rows=3, cols=1, 
         shared_xaxes=True, 
-        vertical_spacing=0.03, 
-        subplot_titles=(f'{ticker} 股價走勢', '成交量', 'RSI 強弱指標'),
-        row_heights=[0.6, 0.2, 0.2]
+        vertical_spacing=0.02, 
+        row_heights=[0.6, 0.2, 0.2] # 高度比例
     )
 
-    # 第一層：K 線圖 (紅漲綠跌)
+    # --- 第 1 層：K 線圖 ---
     fig.add_trace(go.Candlestick(
         x=df.index,
         open=df['Open'], high=df['High'],
         low=df['Low'], close=df['Close'],
         name='K線',
-        increasing_line_color='#FF0000', # 🔴 漲
-        decreasing_line_color='#008000'  # 🟢 跌
+        increasing_line_color='#FF0000', # 紅漲
+        decreasing_line_color='#008000', # 綠跌
+        showlegend=True
     ), row=1, col=1)
 
-    # 第一層：均線
-    fig.add_trace(go.Scatter(x=df.index, y=df['MA20'], name='MA20', line=dict(color='blue', width=1)), row=1, col=1)
-    fig.add_trace(go.Scatter(x=df.index, y=df['MA60'], name='MA60', line=dict(color='orange', width=1)), row=1, col=1)
+    # 均線 (變細一點，比較精緻)
+    fig.add_trace(go.Scatter(x=df.index, y=df['MA20'], name='MA20', line=dict(color='#4169E1', width=1)), row=1, col=1)
+    fig.add_trace(go.Scatter(x=df.index, y=df['MA60'], name='MA60', line=dict(color='#FFA500', width=1)), row=1, col=1)
 
-    # 第二層：成交量 (顏色隨漲跌變)
+    # --- 第 2 層：成交量 ---
     colors = ['#FF0000' if c >= o else '#008000' for o, c in zip(df['Open'], df['Close'])]
-    fig.add_trace(go.Bar(x=df.index, y=df['Volume'], name='成交量', marker_color=colors), row=2, col=1)
+    fig.add_trace(go.Bar(
+        x=df.index, y=df['Volume'], 
+        name='成交量', 
+        marker_color=colors,
+        showlegend=False
+    ), row=2, col=1)
 
-    # 第三層：RSI
-    fig.add_trace(go.Scatter(x=df.index, y=df['RSI'], name='RSI', line=dict(color='purple', width=1.5)), row=3, col=1)
-    fig.add_hline(y=70, line_dash="dash", line_color="red", row=3, col=1)
-    fig.add_hline(y=30, line_dash="dash", line_color="green", row=3, col=1)
+    # --- 第 3 層：RSI ---
+    fig.add_trace(go.Scatter(x=df.index, y=df['RSI'], name='RSI', line=dict(color='#9370DB', width=1.5), showlegend=False), row=3, col=1)
+    # 輔助線 (改為淺灰色虛線)
+    fig.add_hline(y=70, line_dash="dash", line_color="#555555", row=3, col=1)
+    fig.add_hline(y=30, line_dash="dash", line_color="#555555", row=3, col=1)
 
-    # 設定深色背景與互動模式
+    # --- 全局佈局設定 (關鍵美化) ---
     fig.update_layout(
-        template='plotly_dark', # 深色模式適合你的 App
-        xaxis_rangeslider_visible=False, # 隱藏預設滑桿(因為我們有自選區間)
-        height=700,
-        margin=dict(t=30, l=10, r=10, b=10),
-        legend=dict(orientation="h", y=1.02, x=0.5, xanchor="center") # 圖例放上面
+        template='plotly_dark', # 深色主題
+        xaxis_rangeslider_visible=False,
+        height=600, # 稍微調低高度，讓手機一屏能看完
+        margin=dict(t=40, l=10, r=10, b=10), # 邊距縮小，最大化圖表
+        title=dict(
+            text=f"{ticker} 走勢圖",
+            y=0.98,
+            x=0.05,
+            xanchor='left',
+            font=dict(size=18, color="white")
+        ),
+        legend=dict(
+            orientation="h",   # 水平排列
+            y=1, x=0.3,        # 放在標題右邊
+            xanchor="left",
+            yanchor="bottom",
+            font=dict(size=10),
+            bgcolor="rgba(0,0,0,0)" # 透明背景
+        )
+    )
+
+    # --- 座標軸優化 (Y軸移到右邊，X軸隱藏週末) ---
+    
+    # K線圖 Y軸
+    fig.update_yaxes(
+        row=1, col=1,
+        side="right",      # 移到右邊
+        tickformat="$.0f", # 加上 $ 符號，不顯示小數點
+        showgrid=True, gridwidth=1, gridcolor='#333333', # 網格線
+        title_text=""      # 不顯示 "Price" 字樣，省空間
     )
     
-    # 移除週末空隙 (讓 K 線連續)
-    fig.update_xaxes(rangebreaks=[dict(bounds=["sat", "mon"])])
+    # 成交量 Y軸
+    fig.update_yaxes(
+        row=2, col=1,
+        side="right", 
+        showgrid=False,    # 成交量不需要網格
+        title_text="Vol",  # 小小的標籤
+        title_font=dict(size=10, color="gray")
+    )
+
+    # RSI Y軸
+    fig.update_yaxes(
+        row=3, col=1,
+        side="right",
+        tickvals=[30, 70], # 只顯示關鍵刻度
+        showgrid=True, gridcolor='#333333',
+        title_text="RSI",
+        title_font=dict(size=10, color="gray")
+    )
+
+    # X軸設定 (移除週末空檔)
+    fig.update_xaxes(
+        rangebreaks=[dict(bounds=["sat", "mon"])],
+        showgrid=True, gridwidth=1, gridcolor='#333333'
+    )
     
     return fig
 # ========== 修改結束 ==========
