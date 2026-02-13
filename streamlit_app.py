@@ -329,6 +329,19 @@ elif mode == "🔥 S&P 500 熱圖":
                 if fig:
                     st.plotly_chart(fig, use_container_width=True)
                 
+# 在熱圖模式下的顯示邏輯中加入：
+with st.expander("🛠️ 開發者偵錯工具：原始數據檢查"):
+    st.write("這是從 yfinance 抓取到的最新 sector 資料清單：")
+    # sector_df 是你呼叫 fetch_sector_performance() 回傳的結果
+    st.dataframe(sector_df, use_container_width=True)
+    
+    # 檢查是否有任何行業回傳了空值
+    missing_data = sector_df[sector_df['status'] == "no_data"]
+    if not missing_data.empty:
+        st.warning(f"以下代碼目前抓不到歷史資料：{', '.join(missing_data['ticker'].tolist())}")
+
+
+
                 st.subheader("📋 詳細數據")
                 display_df = sector_df[['sector', 'ticker', 'change']].copy()
                 display_df.columns = ['行業', '代碼', '漲跌%']
