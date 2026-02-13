@@ -9,7 +9,7 @@ import io
 import warnings
 warnings.filterwarnings('ignore')
 
-# 頁面配置
+# 頁面配置 - 針對手機優化
 st.set_page_config(
     page_title="美股投資戰情室",
     page_icon="📈",
@@ -17,43 +17,73 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# 自定義 CSS
+# 自定義 CSS - 手機優化
 st.markdown("""
 <style>
-    .main {padding: 0.5rem;}
+    /* 手機優化 */
+    .main {
+        padding: 0.5rem;
+    }
+    
+    /* 指標卡片樣式 */
+    .metric-card {
+        background-color: #f0f2f6;
+        padding: 15px;
+        border-radius: 10px;
+        margin: 5px 0;
+        text-align: center;
+    }
+    
+    .metric-value {
+        font-size: 24px;
+        font-weight: bold;
+        margin: 5px 0;
+    }
+    
+    .metric-label {
+        font-size: 14px;
+        color: #666;
+    }
+    
+    /* 按鈕樣式 */
     .stButton>button {
         width: 100%;
         border-radius: 10px;
         height: 3em;
         font-weight: bold;
     }
+    
+    /* 熱圖優化 */
+    .plotly-graph-div {
+        height: 600px !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
-# S&P 500 主要行業
+# S&P 500 主要行業代碼和名稱
 SP500_SECTORS = {
-    "XLK": "科技 Technology",
-    "XLF": "金融 Financial",
-    "XLV": "醫療 Healthcare",
-    "XLY": "消費 Consumer",
-    "XLC": "通訊 Communication",
-    "XLI": "工業 Industrial",
-    "XLP": "民生 Staples",
-    "XLE": "能源 Energy",
-    "XLRE": "房產 Real Estate",
-    "XLB": "原料 Materials",
-    "XLU": "公用 Utilities"
+    "XLK": "科技 (Technology)",
+    "XLF": "金融 (Financial)",
+    "XLV": "醫療保健 (Healthcare)",
+    "XLY": "非必需消費 (Consumer Discretionary)",
+    "XLC": "通訊服務 (Communication)",
+    "XLI": "工業 (Industrial)",
+    "XLP": "必需消費 (Consumer Staples)",
+    "XLE": "能源 (Energy)",
+    "XLRE": "房地產 (Real Estate)",
+    "XLB": "原物料 (Materials)",
+    "XLU": "公用事業 (Utilities)"
 }
 
-# 熱門個股
+# 熱門個股清單
 POPULAR_STOCKS = [
-    "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "TSLA", "META", 
-    "V", "JNJ", "WMT", "JPM", "MA", "DIS", "NFLX", "COST"
+    "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "TSLA", "META", "BRK.B",
+    "V", "JNJ", "WMT", "JPM", "MA", "PG", "UNH", "DIS", "HD", "BAC",
+    "NFLX", "ADBE", "CRM", "CSCO", "PFE", "TMO", "COST", "INTC"
 ]
 
-@st.cache_data(ttl=300)
 def calculate_rsi(data, periods=14):
-    """計算 RSI"""
+    """計算 RSI 指標"""
     delta = data['Close'].diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=periods).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(window=periods).mean()
@@ -78,7 +108,6 @@ def get_trend_signal(df):
     else:
         return "盤整 ↔️"
 
-@st.cache_data(ttl=300)
 def fetch_stock_data(ticker, period="6mo"):
     """獲取股票數據"""
     try:
@@ -88,7 +117,7 @@ def fetch_stock_data(ticker, period="6mo"):
             return None, None
         return df, stock
     except Exception as e:
-        st.error(f"無法獲取數據: {str(e)}")
+        st.error(f"無法獲取 {ticker} 的數據: {str(e)}")
         return None, None
 
 def plot_candlestick(df, ticker):
@@ -101,7 +130,7 @@ def plot_candlestick(df, ticker):
     # 準備 mplfinance 數據
     mpf_df = df[['Open', 'High', 'Low', 'Close', 'Volume']].copy()
     
-    # 移動平均線和 RSI (panel=2 因為 volume 佔用 panel 1)
+    # 移動平均線
     apds = [
         mpf.make_addplot(df['MA20'], color='blue', width=1.5),
         mpf.make_addplot(df['MA60'], color='orange', width=1.5),
@@ -138,57 +167,55 @@ def translate_to_chinese(text):
     """翻譯成繁體中文"""
     try:
         translator = GoogleTranslator(source='en', target='zh-TW')
-        result = translator.translate(text)
-        return result if result else text
-    except Exception as e:
-        # 翻譯失敗時返回原文
+        return translator.translate(text)
+    except:
         return text
 
-def fetch_news(stock):
+def fetch_news(ticker, stock):
     """獲取並翻譯新聞"""
     try:
-        news_list = []
-        if hasattr(stock, 'news') and stock.news:
-            for item in stock.news[:3]:
-                title = item.get('title', '')
-                link = item.get('link', '')
-                
-                if title:  # 確保標題存在
-                    # 嘗試翻譯，失敗則使用原文
-                    translated_title = translate_to_chinese(title)
-                    news_list.append({
-                        'title': translated_title,
-                        'link': link
-                    })
+        news = stock.news[:3] if hasattr(stock, 'news') and stock.news else []
+        translated_news = []
         
-        return news_list
-    except Exception as e:
+        for item in news:
+            title = item.get('title', '')
+            link = item.get('link', '')
+            translated_title = translate_to_chinese(title)
+            translated_news.append({
+                'title': translated_title,
+                'link': link
+            })
+        
+        return translated_news
+    except:
         return []
 
 def fetch_institutional_holders(stock):
-    """獲取機構持股 - 修正：接收 stock 物件而非 ticker 字串"""
+    """獲取機構持股"""
     try:
         holders = stock.institutional_holders
         if holders is not None and not holders.empty:
-            # 重新命名欄位
-            holders = holders.copy()
             holders.columns = ['機構名稱', '持股數', '持股日期', '持股比例', '持股價值']
             return holders.head(10)
         return None
-    except Exception as e:
+    except:
         return None
 
-@st.cache_data(ttl=300)
 def fetch_sector_performance():
-    """獲取行業表現"""
+    """獲取 S&P 500 行業表現"""
     sector_data = []
     
-    for ticker, name in SP500_SECTORS.items():
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+    
+    for idx, (ticker, name) in enumerate(SP500_SECTORS.items()):
         try:
+            status_text.text(f"正在載入 {name}...")
             stock = yf.Ticker(ticker)
             hist = stock.history(period="5d")
             
             if not hist.empty and len(hist) >= 2:
+                # 計算漲跌幅
                 current = hist['Close'].iloc[-1]
                 previous = hist['Close'].iloc[-2]
                 change = ((current - previous) / previous) * 100
@@ -198,139 +225,178 @@ def fetch_sector_performance():
                     'ticker': ticker,
                     'change': change
                 })
-        except:
+            
+            progress_bar.progress((idx + 1) / len(SP500_SECTORS))
+        except Exception as e:
+            st.warning(f"無法載入 {name}: {str(e)}")
             continue
+    
+    progress_bar.empty()
+    status_text.empty()
     
     return pd.DataFrame(sector_data)
 
 def create_sector_heatmap(df):
-    """創建行業熱圖 - 修正 hover 顯示問題"""
+    """創建行業熱圖 - 美股標準配色（綠跌紅漲）"""
     if df.empty:
         return None
     
+    # 計算絕對值用於區塊大小
     df['abs_change'] = df['change'].abs()
     
-    # 創建熱圖
+    # 格式化顯示文字
+    df['display_text'] = df.apply(
+        lambda x: f"<b>{x['sector']}</b><br><b style='font-size:18px'>{x['change']:+.2f}%</b>",
+        axis=1
+    )
+    
+    # 使用 RdYlGn_r 配色（反轉）：綠色=負值（下跌），紅色=正值（上漲）
     fig = px.treemap(
         df,
         path=['sector'],
         values='abs_change',
         color='change',
-        color_continuous_scale='RdYlGn_r',
+        color_continuous_scale='RdYlGn_r',  # 反轉配色
         color_continuous_midpoint=0,
-        hover_data={'change': ':.2f'}  # 只顯示漲跌幅
+        custom_data=['display_text'],
+        title='S&P 500 行業熱圖 (紅漲綠跌)'
     )
     
-    # 自定義文字顯示
+    # 更新佈局
     fig.update_traces(
-        texttemplate="<b>%{label}</b><br><b>%{color:+.2f}%</b>",
+        texttemplate='%{customdata[0]}',
         textposition='middle center',
-        marker=dict(line=dict(width=2, color='white')),
-        hovertemplate='<b>%{label}</b><br>漲跌幅: %{color:+.2f}%<extra></extra>'  # 自定義 hover
+        marker=dict(line=dict(width=2, color='white'))
     )
     
     fig.update_layout(
         height=600,
-        margin=dict(t=30, l=10, r=10, b=10),
-        coloraxis_colorbar=dict(title="漲跌%", tickformat='+.1f')
+        margin=dict(t=50, l=10, r=10, b=10),
+        coloraxis_colorbar=dict(
+            title="漲跌幅 (%)",
+            tickformat='+.1f'
+        )
     )
     
     return fig
 
-# ========== 主程式 ==========
+# ==================== 主程式 ====================
 
 st.title("📈 美股投資戰情室")
-st.caption("專為手機優化的投資看盤工具")
+st.caption("行動版投資看盤工具 - 專為 iPhone 優化")
 
-mode = st.radio("選擇功能", ["📊 個股分析", "🔥 S&P 500 熱圖"], horizontal=True)
+# 功能模式選擇
+mode = st.radio(
+    "選擇功能",
+    ["📊 個股分析", "🔥 S&P 500 熱圖"],
+    horizontal=True
+)
+
 st.divider()
 
-# ========== 個股分析 ==========
+# ==================== 模式 A: 個股分析 ====================
 if mode == "📊 個股分析":
-    st.subheader("個股分析")
+    st.subheader("個股全方位分析")
     
-    input_method = st.radio("輸入方式", ["下拉選單", "手動輸入"], horizontal=True)
+    # 輸入方式選擇
+    input_method = st.radio(
+        "選擇輸入方式",
+        ["下拉選單", "手動輸入"],
+        horizontal=True
+    )
     
     if input_method == "下拉選單":
         ticker = st.selectbox("選擇股票", POPULAR_STOCKS)
     else:
-        ticker = st.text_input("輸入代碼", value="AAPL").upper()
+        ticker = st.text_input("輸入股票代碼 (如 AAPL)", value="AAPL").upper()
     
-    if st.button("🔍 分析", type="primary"):
-        with st.spinner(f"載入 {ticker} 中..."):
+    if st.button("🔍 開始分析", type="primary"):
+        with st.spinner(f"正在分析 {ticker}..."):
             df, stock = fetch_stock_data(ticker)
             
             if df is not None and stock is not None:
-                # 關鍵指標
+                # 計算指標
                 current_price = df['Close'].iloc[-1]
                 prev_price = df['Close'].iloc[-2]
-                change_pct = ((current_price - prev_price) / prev_price) * 100
+                price_change = current_price - prev_price
+                price_change_pct = (price_change / prev_price) * 100
+                volume = df['Volume'].iloc[-1]
                 rsi = calculate_rsi(df).iloc[-1]
                 trend = get_trend_signal(df)
                 
-                st.success(f"✅ {ticker} 數據已載入")
+                # 顯示關鍵指標
+                st.success(f"✅ 成功載入 {ticker} 數據")
                 
                 col1, col2, col3 = st.columns(3)
-                col1.metric("股價", f"${current_price:.2f}", f"{change_pct:+.2f}%")
-                col2.metric("RSI(14)", f"{rsi:.1f}")
-                col3.metric("趨勢", trend)
+                
+                with col1:
+                    st.metric("股價", f"${current_price:.2f}", f"{price_change_pct:+.2f}%")
+                
+                with col2:
+                    st.metric("RSI(14)", f"{rsi:.1f}", "")
+                
+                with col3:
+                    st.metric("趨勢", trend, "")
                 
                 # K 線圖
                 st.subheader("📈 技術分析圖")
-                try:
-                    fig = plot_candlestick(df, ticker)
-                    st.pyplot(fig)
-                except Exception as e:
-                    st.error(f"圖表繪製失敗: {str(e)}")
+                fig = plot_candlestick(df, ticker)
+                st.pyplot(fig)
                 
-                # 機構持股 - 傳入 stock 物件
+                # 機構持股
                 st.subheader("🏢 機構持股 TOP 10")
                 holders = fetch_institutional_holders(stock)
                 if holders is not None:
-                    st.dataframe(holders, use_container_width=True, hide_index=True)
+                    st.dataframe(holders, use_container_width=True)
                 else:
                     st.info("暫無機構持股資料")
                 
-                # 新聞 - 傳入 stock 物件
+                # AI 翻譯新聞
                 st.subheader("📰 最新新聞 (AI 翻譯)")
-                news_list = fetch_news(stock)
+                news_list = fetch_news(ticker, stock)
+                
                 if news_list:
                     for idx, news in enumerate(news_list, 1):
-                        st.markdown(f"**{idx}. {news['title']}**")
-                        st.link_button("閱讀全文", news['link'], use_container_width=True)
-                        if idx < len(news_list):
+                        with st.container():
+                            st.markdown(f"**{idx}. {news['title']}**")
+                            st.link_button("閱讀全文", news['link'], use_container_width=True)
                             st.divider()
                 else:
-                    st.info("暫無新聞")
+                    st.info("暫無相關新聞")
             else:
-                st.error(f"無法載入 {ticker}，請確認代碼是否正確")
+                st.error(f"無法載入 {ticker} 的數據，請確認股票代碼是否正確")
 
-# ========== S&P 500 熱圖 ==========
+# ==================== 模式 B: S&P 500 熱圖 ====================
 elif mode == "🔥 S&P 500 熱圖":
     st.subheader("S&P 500 行業表現")
-    st.caption("🔴 紅色=上漲 | 🟢 綠色=下跌")
+    st.caption("紅色=上漲 | 綠色=下跌 | 區塊大小=波動程度")
     
     if st.button("🔄 載入熱圖", type="primary"):
-        with st.spinner("載入 11 個行業..."):
+        with st.spinner("正在載入 11 個行業數據..."):
             sector_df = fetch_sector_performance()
             
             if not sector_df.empty:
-                st.success(f"✅ 載入 {len(sector_df)} 個行業")
+                st.success(f"✅ 成功載入 {len(sector_df)} 個行業數據")
                 
+                # 顯示統計
                 avg_change = sector_df['change'].mean()
-                st.metric("平均漲跌", f"{avg_change:+.2f}%")
+                st.metric("平均漲跌幅", f"{avg_change:+.2f}%")
                 
+                # 繪製熱圖
                 fig = create_sector_heatmap(sector_df)
                 if fig:
                     st.plotly_chart(fig, use_container_width=True)
                 
+                # 顯示詳細數據
                 st.subheader("📋 詳細數據")
                 display_df = sector_df[['sector', 'ticker', 'change']].copy()
-                display_df.columns = ['行業', '代碼', '漲跌%']
-                display_df['漲跌%'] = display_df['漲跌%'].apply(lambda x: f"{x:+.2f}%")
+                display_df.columns = ['行業', '代碼', '漲跌幅 (%)']
+                display_df['漲跌幅 (%)'] = display_df['漲跌幅 (%)'].apply(lambda x: f"{x:+.2f}%")
+                display_df = display_df.sort_values('行業')
                 st.dataframe(display_df, use_container_width=True, hide_index=True)
             else:
-                st.error("無法載入數據")
+                st.error("無法載入行業數據，請稍後再試")
 
+# 頁尾
 st.divider()
-st.caption("📊 數據來源: Yahoo Finance | ⚠️ 僅供參考，不構成投資建議")
+st.caption("📱 數據來源: Yahoo Finance | ⚠️ 僅供參考，不構成投資建議")
