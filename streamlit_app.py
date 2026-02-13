@@ -208,52 +208,35 @@ def fetch_sector_performance():
     return pd.DataFrame(sector_data)
 
 def create_sector_heatmap(df):
-    """
-    創建台股風格行業熱圖：紅漲綠跌
-    """
+    """創建行業熱圖 - 修正 hover 顯示問題"""
     if df.empty:
         return None
     
-    # 計算絕對值作為方塊大小的依據
     df['abs_change'] = df['change'].abs()
     
-    # 建立熱圖
+    # 創建熱圖
     fig = px.treemap(
         df,
         path=['sector'],
-        values='abs_change',  # 方塊大小由漲跌幅絕對值決定
-        color='change',       # 顏色由漲跌幅數值決定
-        # 台股顏色標準：紅色(漲) > 灰色(平) > 綠色(跌)
-        # 這裡使用自定義連續色階，確保顏色符合視覺習慣
-        color_continuous_scale=[
-            [0, "#228B22"],      # 負值深處：森林綠 (跌)
-            [0.45, "#90EE90"],   # 負值接近零：淺綠
-            [0.5, "#808080"],    # 零點：灰色 (平盤)
-            [0.55, "#FFB6C1"],   # 正值接近零：淺紅
-            [1, "#FF0000"]       # 正值深處：純紅 (漲)
-        ],
+        values='abs_change',
+        color='change',
+        color_continuous_scale='RdYlGn_r',
         color_continuous_midpoint=0,
-        range_color=[-4, 4]      # 設定顯色範圍，與你提供的圖表標籤 (-4% ~ 4%) 一致
+        hover_data={'change': ':.2f'}  # 只顯示漲跌幅
     )
     
-    # 更新文字顯示與樣式
+    # 自定義文字顯示
     fig.update_traces(
-        # %{label} 為行業名，%{color:+.2f}% 會顯示帶有 + 或 - 的百分比
-        texttemplate="<span style='font-size:16px;'><b>%{label}</b></span><br><span style='font-size:18px;'>%{color:+.2f}%</span>",
+        texttemplate="<b>%{label}</b><br><b>%{color:+.2f}%</b>",
         textposition='middle center',
-        marker=dict(line=dict(width=1, color='white')),
-        hovertemplate='<b>%{label}</b><br>漲跌幅: %{color:+.2f}%<extra></extra>'
+        marker=dict(line=dict(width=2, color='white')),
+        hovertemplate='<b>%{label}</b><br>漲跌幅: %{color:+.2f}%<extra></extra>'  # 自定義 hover
     )
     
     fig.update_layout(
         height=600,
-        margin=dict(t=10, l=10, r=10, b=10),
-        # 隱藏右側色柱（如不需要可註解掉），或調整其標題
-        coloraxis_colorbar=dict(
-            title="漲跌幅度",
-            tickvals=[-4, -2, 0, 2, 4],
-            ticktext=["-4%", "-2%", "0%", "2%", "4%"]
-        )
+        margin=dict(t=30, l=10, r=10, b=10),
+        coloraxis_colorbar=dict(title="漲跌%", tickformat='+.1f')
     )
     
     return fig
