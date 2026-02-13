@@ -259,7 +259,7 @@ def create_sector_heatmap(df):
     fig.update_traces(
         texttemplate='%{customdata[0]}',
         textposition='middle center',
-        marker=dict(line=dict(width=2, color='white'))
+        marker=dict(line=dict(width=2, color='white')),
         hovertemplate='<b>%{label}</b><br>漲跌幅: %{color:+.2f}%<extra></extra>'
     )
     
