@@ -391,7 +391,16 @@ if mode == "📊 個股分析":
                 st.success(f"✅ {ticker} 數據已載入")
                 
                 col1, col2, col3 = st.columns(3)
-                col1.metric("股價", f"${current_price:.2f}", f"{change_pct:+.2f}%")
+                # 原本的程式碼：
+                # col1.metric("股價", f"${current_price:.2f}", f"{change_pct:+.2f}%")
+                
+                # ✅ 修改後：加入 delta_color="inverse"
+                col1.metric(
+                    "股價", 
+                    f"${current_price:.2f}", 
+                    f"{change_pct:+.2f}%", 
+                    delta_color="inverse" # 關鍵：反轉顏色邏輯 (紅漲綠跌)
+                )
                 col2.metric("RSI(14)", f"{rsi:.1f}")
                 col3.metric("趨勢", trend)
                 
