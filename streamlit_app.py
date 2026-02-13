@@ -2,7 +2,9 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import plotly.express as px
-import mplfinance as mpf
+import plotly.graph_objects as go # 新增
+from plotly.subplots import make_subplots # 新增
+import mplfinance as mpf # 保留但不使用，或者你可以刪除
 from datetime import datetime, timedelta
 from deep_translator import GoogleTranslator
 import io
@@ -95,48 +97,64 @@ def get_stock_object(ticker):
     """獲取 Ticker 物件 (不快取)"""
     return yf.Ticker(ticker)
 
+# ========== 修改開始：替換 plot_candlestick 函式 ==========
 def plot_candlestick(df, ticker):
-    """繪製 K 線圖"""
-    # 計算移動平均線
+    """
+    使用 Plotly 繪製互動式 K 線圖
+    解決中文亂碼，支援紅漲綠跌與互動縮放
+    """
+    # 計算指標
     df['MA20'] = df['Close'].rolling(window=20).mean()
     df['MA60'] = df['Close'].rolling(window=60).mean()
     df['RSI'] = calculate_rsi(df)
-    
-    # 準備 mplfinance 數據
-    mpf_df = df[['Open', 'High', 'Low', 'Close', 'Volume']].copy()
-    
-    # 移動平均線和 RSI (panel=2 因為 volume 佔用 panel 1)
-    apds = [
-        mpf.make_addplot(df['MA20'], color='blue', width=1.5),
-        mpf.make_addplot(df['MA60'], color='orange', width=1.5),
-        mpf.make_addplot(df['RSI'], panel=2, color='purple', ylabel='RSI')
-    ]
-    
-    # 自定義樣式
-    mc = mpf.make_marketcolors(
-        up='red', down='green',
-        edge='inherit',
-        wick='inherit',
-        volume='inherit'
+
+    # 建立畫布：3 列 (K線, 成交量, RSI)
+    # row_heights 控制高度比例：K線最大
+    fig = make_subplots(
+        rows=3, cols=1, 
+        shared_xaxes=True, 
+        vertical_spacing=0.03, 
+        subplot_titles=(f'{ticker} 股價走勢', '成交量', 'RSI 強弱指標'),
+        row_heights=[0.6, 0.2, 0.2]
     )
-    s = mpf.make_mpf_style(marketcolors=mc, gridstyle=':', y_on_right=False)
-    
-    # 繪製圖表
-    fig, axes = mpf.plot(
-        mpf_df,
-        type='candle',
-        style=s,
-        addplot=apds,
-        volume=True,
-        title=f'{ticker} 技術分析圖',
-        ylabel='股價 ($)',
-        ylabel_lower='成交量',
-        figsize=(10, 8),
-        returnfig=True,
-        panel_ratios=(3, 1, 1)
+
+    # 第一層：K 線圖 (紅漲綠跌)
+    fig.add_trace(go.Candlestick(
+        x=df.index,
+        open=df['Open'], high=df['High'],
+        low=df['Low'], close=df['Close'],
+        name='K線',
+        increasing_line_color='#FF0000', # 🔴 漲
+        decreasing_line_color='#008000'  # 🟢 跌
+    ), row=1, col=1)
+
+    # 第一層：均線
+    fig.add_trace(go.Scatter(x=df.index, y=df['MA20'], name='MA20', line=dict(color='blue', width=1)), row=1, col=1)
+    fig.add_trace(go.Scatter(x=df.index, y=df['MA60'], name='MA60', line=dict(color='orange', width=1)), row=1, col=1)
+
+    # 第二層：成交量 (顏色隨漲跌變)
+    colors = ['#FF0000' if c >= o else '#008000' for o, c in zip(df['Open'], df['Close'])]
+    fig.add_trace(go.Bar(x=df.index, y=df['Volume'], name='成交量', marker_color=colors), row=2, col=1)
+
+    # 第三層：RSI
+    fig.add_trace(go.Scatter(x=df.index, y=df['RSI'], name='RSI', line=dict(color='purple', width=1.5)), row=3, col=1)
+    fig.add_hline(y=70, line_dash="dash", line_color="red", row=3, col=1)
+    fig.add_hline(y=30, line_dash="dash", line_color="green", row=3, col=1)
+
+    # 設定深色背景與互動模式
+    fig.update_layout(
+        template='plotly_dark', # 深色模式適合你的 App
+        xaxis_rangeslider_visible=False, # 隱藏預設滑桿(因為我們有自選區間)
+        height=700,
+        margin=dict(t=30, l=10, r=10, b=10),
+        legend=dict(orientation="h", y=1.02, x=0.5, xanchor="center") # 圖例放上面
     )
+    
+    # 移除週末空隙 (讓 K 線連續)
+    fig.update_xaxes(rangebreaks=[dict(bounds=["sat", "mon"])])
     
     return fig
+# ========== 修改結束 ==========
 
 def translate_to_chinese(text):
     """翻譯成繁體中文"""
@@ -170,7 +188,7 @@ def fetch_news(stock):
         return []
 
 def fetch_institutional_holders(stock):
-    """獲取機構持股 - 修正：接收 stock 物件而非 ticker 字串"""
+    """獲取機構持股"""
     try:
         holders = stock.institutional_holders
         if holders is not None and not holders.empty:
@@ -293,10 +311,20 @@ if mode == "📊 個股分析":
     else:
         ticker = st.text_input("輸入代碼", value="AAPL").upper()
     
+    # ========== 修改開始：新增觀察區間滑桿 ==========
+    time_period = st.select_slider(
+        "📅 選擇觀察區間",
+        options=["1mo", "3mo", "6mo", "1y", "2y", "5y"],
+        value="6mo",
+        format_func=lambda x: {"1mo":"1個月", "3mo":"3個月", "6mo":"6個月", "1y":"1年", "2y":"2年", "5y":"5年"}[x]
+    )
+    # ========== 修改結束 ==========
+
     if st.button("🔍 分析", type="primary"):
         with st.spinner(f"載入 {ticker} 中..."):
-            df = fetch_stock_history(ticker)
-            stock = get_stock_object(ticker) # 直接獲取物件
+            # 修改：傳入 time_period
+            df = fetch_stock_history(ticker, period=time_period)
+            stock = get_stock_object(ticker) 
             
             if df is not None and stock is not None:
                 # 關鍵指標
@@ -313,15 +341,16 @@ if mode == "📊 個股分析":
                 col2.metric("RSI(14)", f"{rsi:.1f}")
                 col3.metric("趨勢", trend)
                 
-                # K 線圖
-                st.subheader("📈 技術分析圖")
+                # ========== 修改開始：改用互動式圖表 ==========
+                st.subheader("📈 技術分析 (可縮放)")
                 try:
                     fig = plot_candlestick(df, ticker)
-                    st.pyplot(fig)
+                    st.plotly_chart(fig, use_container_width=True) # 改用 st.plotly_chart
                 except Exception as e:
                     st.error(f"圖表繪製失敗: {str(e)}")
+                # ========== 修改結束 ==========
                 
-                # 機構持股 - 傳入 stock 物件
+                # 機構持股
                 st.subheader("🏢 機構持股 TOP 10")
                 holders = fetch_institutional_holders(stock)
                 if holders is not None:
@@ -329,7 +358,7 @@ if mode == "📊 個股分析":
                 else:
                     st.info("暫無機構持股資料")
                 
-                # 新聞 - 傳入 stock 物件
+                # 新聞
                 st.subheader("📰 最新新聞 (AI 翻譯)")
                 news_list = fetch_news(stock)
                 if news_list:
@@ -362,8 +391,7 @@ elif mode == "🔥 S&P 500 熱圖":
             if fig:
                 st.plotly_chart(fig, use_container_width=True)
                 
-                # --- 新增：顯示取用的數據日期 ---
-                # 從 DataFrame 中找出最新的交易日期 (排除 N/A)
+                # 顯示取用的數據日期
                 valid_dates = sector_df[sector_df['today'] != 'N/A']
                 if not valid_dates.empty:
                     latest_t = valid_dates['today'].max()
