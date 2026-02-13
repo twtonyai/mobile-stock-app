@@ -1,8 +1,8 @@
-streamlit==1.29.0
-yfinance==0.2.32
-pandas==2.1.3
-plotly==5.18.0
-mplfinance==0.12.10b0
-deep-translator==1.11.4
-matplotlib==3.8.2
-numpy==1.26.2
+streamlit
+yfinance
+pandas
+plotly
+mplfinance
+deep-translator
+matplotlib
+numpy
