@@ -134,7 +134,7 @@ def plot_candlestick(df, ticker):
     apds = [
         mpf.make_addplot(df['MA20'], color='blue', width=1.5),
         mpf.make_addplot(df['MA60'], color='orange', width=1.5),
-        mpf.make_addplot(df['RSI'], panel=1, color='purple', ylabel='RSI')
+        mpf.make_addplot(df['RSI'], panel=2, color='purple', ylabel='RSI')
     ]
     
     # 自定義樣式
